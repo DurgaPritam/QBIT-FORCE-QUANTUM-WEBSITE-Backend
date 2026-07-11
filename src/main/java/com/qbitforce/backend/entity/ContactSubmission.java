@@ -29,6 +29,7 @@ public class ContactSubmission {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String message;
 
+    /** Legacy column — contact forms are stored in DB only (no SMTP). */
     @Column(nullable = false)
     private boolean emailSent = false;
 
@@ -92,14 +93,6 @@ public class ContactSubmission {
 
     public void setMessage(String message) {
         this.message = message;
-    }
-
-    public boolean isEmailSent() {
-        return emailSent;
-    }
-
-    public void setEmailSent(boolean emailSent) {
-        this.emailSent = emailSent;
     }
 
     public boolean isRead() {

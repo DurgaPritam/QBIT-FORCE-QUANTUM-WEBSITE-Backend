@@ -14,12 +14,14 @@ import org.springframework.stereotype.Component;
 public class DataInitializer implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
+    private static final String CMS_SEED_FLAG = "cms-initial-content";
 
     private final AdminUserRepository adminUserRepository;
     private final GalleryItemRepository galleryItemRepository;
     private final VideoItemRepository videoItemRepository;
     private final PublicationItemRepository publicationItemRepository;
     private final PressMediaItemRepository pressMediaItemRepository;
+    private final SeedFlagRepository seedFlagRepository;
     private final AdminProperties adminProperties;
     private final PasswordEncoder passwordEncoder;
 
@@ -29,6 +31,7 @@ public class DataInitializer implements CommandLineRunner {
             VideoItemRepository videoItemRepository,
             PublicationItemRepository publicationItemRepository,
             PressMediaItemRepository pressMediaItemRepository,
+            SeedFlagRepository seedFlagRepository,
             AdminProperties adminProperties,
             PasswordEncoder passwordEncoder) {
         this.adminUserRepository = adminUserRepository;
@@ -36,6 +39,7 @@ public class DataInitializer implements CommandLineRunner {
         this.videoItemRepository = videoItemRepository;
         this.publicationItemRepository = publicationItemRepository;
         this.pressMediaItemRepository = pressMediaItemRepository;
+        this.seedFlagRepository = seedFlagRepository;
         this.adminProperties = adminProperties;
         this.passwordEncoder = passwordEncoder;
     }
@@ -43,44 +47,68 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) {
         seedAdmin();
-        if (galleryItemRepository.count() == 0) {
+        seedCmsOnce();
+    }
+
+    /**
+     * Seeds default CMS content only once. After that, admin deletes stay permanent
+     * even if the backend restarts or a table becomes empty.
+     */
+    private void seedCmsOnce() {
+        if (seedFlagRepository.existsById(CMS_SEED_FLAG)) {
+            return;
+        }
+
+        boolean hasAnyContent =
+                galleryItemRepository.count() > 0
+                        || videoItemRepository.count() > 0
+                        || publicationItemRepository.count() > 0
+                        || pressMediaItemRepository.count() > 0;
+
+        if (!hasAnyContent) {
             seedGallery();
-        } else {
-            syncGalleryDefaults();
-        }
-        if (videoItemRepository.count() == 0) {
             seedVideos();
-        }
-        if (publicationItemRepository.count() == 0) {
             seedPublications();
-        }
-        if (pressMediaItemRepository.count() == 0) {
             seedPress();
+            log.info("Initial CMS content seeded");
+        } else {
+            log.info("CMS content already present — skipping seed data");
         }
+
+        seedFlagRepository.save(new SeedFlag(CMS_SEED_FLAG));
     }
 
     private void seedAdmin() {
-        if (adminProperties.getPassword() == null || adminProperties.getPassword().isBlank()) {
-            throw new IllegalStateException("ADMIN_PASSWORD is required in .env to create the initial admin user.");
-        }
-
         String email = adminProperties.getEmail().trim().toLowerCase();
+        boolean adminExists = adminUserRepository.findByEmailIgnoreCase(email).isPresent()
+                || adminUserRepository.count() > 0;
 
-        adminUserRepository.findAll().forEach(admin -> {
-            if (admin.getEmail() == null || !email.equalsIgnoreCase(admin.getEmail())) {
-                adminUserRepository.delete(admin);
-            }
-        });
-
-        if (adminUserRepository.findByEmailIgnoreCase(email).isEmpty()) {
-            AdminUser admin = new AdminUser();
-            admin.setUsername(email);
-            admin.setEmail(email);
-            admin.setPasswordHash(passwordEncoder.encode(adminProperties.getPassword()));
-            admin.setRole("ROLE_ADMIN");
-            adminUserRepository.save(admin);
-            log.info("Admin user created: {}", email);
+        if (adminUserRepository.findByEmailIgnoreCase(email).isPresent()) {
+            adminUserRepository.findByEmailIgnoreCase(email).ifPresent(admin -> {
+                if (!email.equalsIgnoreCase(admin.getUsername())) {
+                    admin.setUsername(email);
+                    adminUserRepository.save(admin);
+                }
+            });
+            return;
         }
+
+        String password = adminProperties.getPassword();
+        if (password == null || password.isBlank()) {
+            if (!adminExists) {
+                log.warn(
+                        "No admin user found and ADMIN_PASSWORD is not set — create an admin in MySQL or set ADMIN_PASSWORD once to seed.");
+            }
+            return;
+        }
+
+        AdminUser admin = new AdminUser();
+        admin.setUsername(email);
+        admin.setEmail(email);
+        admin.setPasswordHash(passwordEncoder.encode(password));
+        admin.setRole("ROLE_ADMIN");
+        adminUserRepository.save(admin);
+        log.info("Admin user created: {}", email);
     }
 
     private void seedGallery() {
@@ -113,44 +141,6 @@ public class DataInitializer implements CommandLineRunner {
                 "https://res.cloudinary.com/dps46p3m8/image/upload/v1782461778/WhatsApp_Image_2026-06-25_at_10.20.07_PM_lxrjmn.jpg",
                 4);
         log.info("Seeded gallery items");
-    }
-
-    private void syncGalleryDefaults() {
-        upsertGalleryIfMissing(
-                "gallery-quantum-frontier-launch",
-                "India's First Open Access Quantum Frontier",
-                "Launch of the Amaravati Quantum Reference Facilities at SRM University Amaravati — built in Amaravati, open to India, for the world.",
-                "events",
-                "https://res.cloudinary.com/dps46p3m8/image/upload/v1780935950/Copy_of_IMG_20260414_161438_zed6bs.jpg",
-                1);
-        upsertGalleryIfMissing(
-                "gallery-leadership-inauguration",
-                "Quantum Leadership at Amaravati",
-                "Dignitaries and partners at the inauguration of India's open-access quantum frontier.",
-                "events",
-                "https://res.cloudinary.com/dps46p3m8/image/upload/v1780935959/Copy_of_IMG_20260414_144515_wl0abz.jpg",
-                2);
-        upsertGalleryIfMissing(
-                "company-1",
-                "Amaravati Quantum Valley",
-                "Building indigenous quantum hardware at scale in Andhra Pradesh.",
-                "facility",
-                "https://res.cloudinary.com/dps46p3m8/image/upload/v1780937130/WhatsApp_Image_2026-06-07_at_6.53.46_PM_vshegz.jpg",
-                3);
-        upsertGalleryIfMissing(
-                "gallery-srm-leadership-visit",
-                "Leadership Visit at SRM University AP",
-                "Reviewing quantum and computing innovations with students and faculty at SRM University AP.",
-                "events",
-                "https://res.cloudinary.com/dps46p3m8/image/upload/v1782461778/WhatsApp_Image_2026-06-25_at_10.20.07_PM_lxrjmn.jpg",
-                4);
-    }
-
-    private void upsertGalleryIfMissing(
-            String id, String title, String caption, String category, String imageUrl, int order) {
-        if (!galleryItemRepository.existsById(id)) {
-            saveGallery(id, title, caption, category, imageUrl, order);
-        }
     }
 
     private void saveGallery(String id, String title, String caption, String category, String imageUrl, int order) {

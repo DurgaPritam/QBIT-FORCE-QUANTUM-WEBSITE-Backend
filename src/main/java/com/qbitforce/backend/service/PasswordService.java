@@ -8,17 +8,12 @@ import com.qbitforce.backend.entity.AdminUser;
 import com.qbitforce.backend.entity.PasswordResetToken;
 import com.qbitforce.backend.repository.AdminUserRepository;
 import com.qbitforce.backend.repository.PasswordResetTokenRepository;
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -31,22 +26,16 @@ public class PasswordService {
     private final AdminUserRepository adminUserRepository;
     private final PasswordResetTokenRepository tokenRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JavaMailSender mailSender;
     private final AppUrlProperties appUrlProperties;
-
-    @Value("${spring.mail.username:}")
-    private String mailUsername;
 
     public PasswordService(
             AdminUserRepository adminUserRepository,
             PasswordResetTokenRepository tokenRepository,
             PasswordEncoder passwordEncoder,
-            JavaMailSender mailSender,
             AppUrlProperties appUrlProperties) {
         this.adminUserRepository = adminUserRepository;
         this.tokenRepository = tokenRepository;
         this.passwordEncoder = passwordEncoder;
-        this.mailSender = mailSender;
         this.appUrlProperties = appUrlProperties;
     }
 
@@ -59,7 +48,8 @@ public class PasswordService {
             token.setExpiresAt(Instant.now().plus(1, ChronoUnit.HOURS));
             tokenRepository.save(token);
 
-            sendResetEmail(admin.getEmail(), tokenValue);
+            String resetUrl = appUrlProperties.getBaseUrl() + "/qbitadmin-2026-login/reset?token=" + tokenValue;
+            log.info("Password reset link for {}: {}", admin.getEmail(), resetUrl);
         });
     }
 
@@ -94,38 +84,5 @@ public class PasswordService {
 
         admin.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         adminUserRepository.save(admin);
-    }
-
-    private void sendResetEmail(String toEmail, String token) {
-        if (mailUsername == null || mailUsername.isBlank()) {
-            log.warn("Mail not configured — reset token for {}: {}", toEmail, token);
-            return;
-        }
-
-        String resetUrl = appUrlProperties.getBaseUrl() + "/qbitadmin-2026-login/reset?token=" + token;
-
-        try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
-            helper.setTo(toEmail);
-            helper.setFrom(mailUsername);
-            helper.setSubject("Qbit Force Admin — Reset Your Password");
-            helper.setText(
-                    """
-                    You requested a password reset for the Qbit Force admin panel.
-
-                    Click the link below to set a new password (valid for 1 hour):
-                    %s
-
-                    If you did not request this, ignore this email.
-                    """
-                            .formatted(resetUrl),
-                    false);
-            mailSender.send(message);
-        } catch (MessagingException ex) {
-            log.error("Failed to send password reset email to {}", toEmail, ex);
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE, "Could not send reset email. Try again later.");
-        }
     }
 }

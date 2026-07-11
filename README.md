@@ -17,8 +17,8 @@ Create `backend/.env` with your secrets:
 |----------|-------------|
 | `DB_PASSWORD` | MySQL password (e.g. root user) |
 | `JWT_SECRET` | **Required** — see below |
-| `ADMIN_USERNAME` | Default: `QbitAdmin` |
-| `ADMIN_PASSWORD` | Plain password — **BCrypt-hashed on first startup** and stored in MySQL |
+| `ADMIN_EMAIL` | Optional — default `info@qbitforcequantum.com` (in `application.yml`) |
+| `ADMIN_PASSWORD` | Optional after first admin exists — only needed once to seed a new admin |
 
 ### Generate JWT secret
 
@@ -89,7 +89,7 @@ Admin panel (no public link): **`http://localhost:5173/qbitadmin-2026-login`**
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/public/contact` | Submit contact form (saved to DB + optional email) |
+| POST | `/api/public/contact` | Submit contact form (saved to DB) |
 | GET | `/api/public/gallery` | Active gallery items |
 | GET | `/api/public/videos` | Active videos |
 | GET | `/api/public/publications` | Active publications / blog posts |
@@ -126,9 +126,12 @@ Admin panel (no public link): **`http://localhost:5173/qbitadmin-2026-login`**
 - Generic error messages (no stack traces to clients)
 - Admin panel hidden URL — not linked from public site
 
-## Email (optional)
+## Contact submissions
 
-Set `MAIL_USERNAME` and `MAIL_PASSWORD` in `.env` to enable SMTP notifications. Submissions are **always** stored in MySQL even if mail is not configured.
+Contact form posts are saved to MySQL and shown in the admin panel. No SMTP / outbound email is used.
+
+Admin account email is set via `ADMIN_EMAIL` (default: `info@qbitforcequantum.com`).
+Forgot-password creates a reset link and writes it to the server logs (no email send).
 
 ## Production checklist
 
@@ -137,4 +140,4 @@ Set `MAIL_USERNAME` and `MAIL_PASSWORD` in `.env` to enable SMTP notifications. 
 - [ ] Set `CORS_ALLOWED_ORIGINS` to your production domain only
 - [ ] Enable HTTPS (reverse proxy / load balancer)
 - [ ] Rotate admin password after first login
-- [ ] Configure SMTP with app-specific password
+- [ ] Set `ADMIN_EMAIL=info@qbitforcequantum.com`

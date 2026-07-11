@@ -6,8 +6,8 @@ import com.qbitforce.backend.dto.LoginResponse;
 import com.qbitforce.backend.entity.AdminUser;
 import com.qbitforce.backend.repository.AdminUserRepository;
 import com.qbitforce.backend.security.JwtService;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import com.qbitforce.backend.util.SlidingWindowRateLimiter;
+import java.util.concurrent.TimeUnit;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -22,7 +22,8 @@ public class AuthService {
     private final AdminUserRepository adminUserRepository;
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
-    private final ConcurrentHashMap<String, AtomicInteger> loginAttempts = new ConcurrentHashMap<>();
+    private final SlidingWindowRateLimiter rateLimiter =
+            new SlidingWindowRateLimiter(10, TimeUnit.MINUTES.toMillis(15));
 
     public AuthService(
             AuthenticationManager authenticationManager,
@@ -38,8 +39,7 @@ public class AuthService {
     public LoginResponse login(LoginRequest request, String clientIp) {
         String loginId = request.username().trim();
         String key = clientIp + ":" + loginId.toLowerCase();
-        int attempts = loginAttempts.computeIfAbsent(key, k -> new AtomicInteger(0)).incrementAndGet();
-        if (attempts > 10) {
+        if (!rateLimiter.allow(key)) {
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many login attempts.");
         }
 
@@ -50,7 +50,7 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials.");
         }
 
-        loginAttempts.remove(key);
+        rateLimiter.reset(key);
 
         AdminUser admin = adminUserRepository
                 .findByUsername(loginId)

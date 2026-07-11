@@ -34,7 +34,7 @@ public class AuthController {
     @PostMapping("/forgot-password")
     public ApiMessage forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         passwordService.requestReset(request);
-        return new ApiMessage("If that email is registered, a reset link has been sent.");
+        return new ApiMessage("If that email is registered, a password reset link was created. Check the server logs.");
     }
 
     @PostMapping("/reset-password")

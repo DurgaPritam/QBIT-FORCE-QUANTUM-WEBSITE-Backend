@@ -11,7 +11,6 @@ public record ContactSubmissionDto(
         String company,
         String inquiryType,
         String message,
-        boolean emailSent,
         boolean read,
         Instant createdAt) {
 
@@ -24,7 +23,6 @@ public record ContactSubmissionDto(
                 submission.getCompany(),
                 submission.getInquiryType(),
                 submission.getMessage(),
-                submission.isEmailSent(),
                 submission.isRead(),
                 submission.getCreatedAt());
     }
